@@ -1,0 +1,64 @@
+import java.util.concurrent.*;
+
+class Producer implements Runnable {
+    private final BlockingQueue<Integer> queue;
+    private final int id;
+
+    public Producer(BlockingQueue<Integer> queue, int id) {
+        this.queue = queue;
+        this.id = id;
+    }
+
+    @Override
+    public void run() {
+        try {
+            for (int i = 1; i <= 5; i++) {
+                int item = i + id * 100;
+                queue.put(item);
+                System.out.println("Producer " + id + " produced: " + item);
+                Thread.sleep(500);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+class Consumer implements Runnable {
+    private final BlockingQueue<Integer> queue;
+    private final int id;
+
+    public Consumer(BlockingQueue<Integer> queue, int id) {
+        this.queue = queue;
+        this.id = id;
+    }
+
+    @Override
+    public void run() {
+        try {
+            while (true) {
+                int item = queue.take();
+                System.out.println("Consumer " + id + " consumed: " + item);
+                Thread.sleep(800);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+public class ProducerConsumerDemo {
+    public static void main(String[] args) {
+        BlockingQueue<Integer> queue = new ArrayBlockingQueue<>(10);
+
+        Thread p1 = new Thread(new Producer(queue, 1));
+        Thread p2 = new Thread(new Producer(queue, 2));
+        Thread c1 = new Thread(new Consumer(queue, 1));
+        Thread c2 = new Thread(new Consumer(queue, 2));
+
+        p1.start();
+        p2.start();
+        c1.start();
+        c2.start();
+    }
+}

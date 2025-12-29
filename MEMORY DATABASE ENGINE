@@ -1,0 +1,69 @@
+import java.util.*;
+
+class Table {
+    private final String name;
+    private final List<Map<String, String>> rows = new ArrayList<>();
+
+    public Table(String name) {
+        this.name = name;
+    }
+
+    public void insert(Map<String, String> row) {
+        rows.add(row);
+    }
+
+    public List<Map<String, String>> select(String column, String value) {
+        List<Map<String, String>> result = new ArrayList<>();
+        for (Map<String, String> row : rows) {
+            if (row.containsKey(column) && row.get(column).equals(value)) {
+                result.add(row);
+            }
+        }
+        return result;
+    }
+
+    public void printAll() {
+        System.out.println("Table: " + name);
+        for (Map<String, String> row : rows) {
+            System.out.println(row);
+        }
+    }
+}
+
+class Database {
+    private final Map<String, Table> tables = new HashMap<>();
+
+    public void createTable(String name) {
+        tables.put(name, new Table(name));
+    }
+
+    public Table getTable(String name) {
+        return tables.get(name);
+    }
+}
+
+public class InMemoryDB {
+    public static void main(String[] args) {
+        Database db = new Database();
+        db.createTable("users");
+
+        Table users = db.getTable("users");
+        Map<String, String> row1 = new HashMap<>();
+        row1.put("id", "1");
+        row1.put("name", "Alice");
+        users.insert(row1);
+
+        Map<String, String> row2 = new HashMap<>();
+        row2.put("id", "2");
+        row2.put("name", "Bob");
+        users.insert(row2);
+
+        users.printAll();
+
+        System.out.println("Query: name = Alice");
+        List<Map<String, String>> result = users.select("name", "Alice");
+        for (Map<String, String> r : result) {
+            System.out.println(r);
+        }
+    }
+}

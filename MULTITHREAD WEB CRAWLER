@@ -1,0 +1,129 @@
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class Crawler {
+    private static final Pattern HREF_PATTERN = Pattern.compile("(?i)\\bhref\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\"'\\s>]+))");
+    private static final Pattern ABS_HTTP_PATTERN = Pattern.compile("(?i)^(https?://).+");
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
+
+    private final ExecutorService pool;
+    private final ConcurrentMap<String, Boolean> visited = new ConcurrentHashMap<>();
+    private final BlockingQueue<Job> queue = new LinkedBlockingQueue<>();
+    private final AtomicInteger pagesFetched = new AtomicInteger(0);
+    private final ConcurrentMap<String, Long> hostLastAccess = new ConcurrentHashMap<>();
+    private final int maxDepth;
+    private final int maxPages;
+    private final long hostDelayMs = 400;
+
+    public Crawler(int threads, int maxDepth, int maxPages) {
+        this.pool = Executors.newFixedThreadPool(threads, r -> {
+            Thread t = new Thread(r);
+            t.setName("crawler-worker-" + t.getId());
+            t.setDaemon(true);
+            return t;
+        });
+        this.maxDepth = maxDepth;
+        this.maxPages = maxPages;
+    }
+
+    public void start(String seedUrl) throws InterruptedException {
+        String normalized = normalizeUrl(seedUrl, null);
+        if (normalized == null) {
+            System.err.println("Invalid seed URL: " + seedUrl);
+            return;
+        }
+        enqueue(normalized, 0);
+        Future<?> dispatcher = pool.submit(this::dispatchLoop);
+        while (!dispatcher.isDone()) {
+            if (pagesFetched.get() >= maxPages) break;
+            if (queue.isEmpty() && pool.isShutdown()) break;
+            Thread.sleep(100);
+        }
+        pool.shutdown();
+        pool.awaitTermination(30, TimeUnit.SECONDS);
+        System.out.println("\nCrawl finished.");
+        System.out.println("Pages fetched: " + pagesFetched.get());
+        System.out.println("Unique URLs visited: " + visited.size());
+    }
+
+    private void dispatchLoop() {
+        try {
+            while (pagesFetched.get() < maxPages) {
+                Job job = queue.poll(500, TimeUnit.MILLISECONDS);
+                if (job == null) {
+                    if (queue.isEmpty() && pagesFetched.get() >= maxPages) break;
+                    continue;
+                }
+                if (visited.putIfAbsent(job.url, Boolean.TRUE) != null) continue;
+                if (job.depth > maxDepth) continue;
+                pool.submit(() -> crawl(job));
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    private void crawl(Job job) {
+        if (pagesFetched.get() >= maxPages) return;
+        throttleByHost(job.url);
+        String body = fetch(job.url);
+        if (body == null) {
+            System.err.println("[FAIL] " + job.url);
+            return;
+        }
+        int count = pagesFetched.incrementAndGet();
+        System.out.printf("[OK %4d] depth=%d url=%s%n", count, job.depth, job.url);
+        if (job.depth < maxDepth && count < maxPages) {
+            extractAndEnqueueLinks(job.url, job.depth + 1, body);
+        }
+    }
+
+    private void throttleByHost(String url) {
+        try {
+            URI uri = new URI(url);
+            String host = uri.getHost();
+            if (host == null) return;
+            long now = System.currentTimeMillis();
+            long last = hostLastAccess.getOrDefault(host, 0L);
+            long wait = hostDelayMs - (now - last);
+            if (wait > 0) {
+                try {
+                    Thread.sleep(wait);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            hostLastAccess.put(host, System.currentTimeMillis());
+        } catch (URISyntaxException ignored) {
+        }
+    }
+
+    private String fetch(String url) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("User-Agent", "JavaCrawler/1.0 (+https://github.com/your-username)")
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            int status = response.statusCode();
+            if (status >= 200 && status < 300) {
+                byte[] bytes = response.body();
+                String body = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                return body;

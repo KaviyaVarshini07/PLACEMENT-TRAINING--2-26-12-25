@@ -1,0 +1,36 @@
+import java.util.*;
+import java.util.concurrent.*;
+
+public class DistKV {
+    static class Node {
+        final String name;
+        final Map<String, String> data = new ConcurrentHashMap<>();
+        final List<Node> peers = new CopyOnWriteArrayList<>();
+        Node(String name){ this.name=name; }
+        void connect(Node other){ peers.add(other); other.peers.add(this); }
+        void put(String key, String value){
+            data.put(key, value);
+            for(Node p: peers) p.replicate(key, value);
+        }
+        void replicate(String key, String value){ data.put(key, value); }
+        Optional<String> get(String key){
+            String v = data.get(key);
+            if(v != null) return Optional.of(v);
+            for(Node p: peers){
+                v = p.data.get(key);
+                if(v != null){ data.put(key, v); return Optional.of(v); }
+            }
+            return Optional.empty();
+        }
+        public String toString(){ return name + data.toString(); }
+    }
+
+    public static void main(String[] args) {
+        Node A = new Node("A"), B = new Node("B"), C = new Node("C");
+        A.connect(B); B.connect(C);
+        A.put("user:1", "Alice");
+        C.put("user:2", "Bob");
+        System.out.println("A get user:2 -> " + A.get("user:2"));
+        System.out.println(A); System.out.println(B); System.out.println(C);
+    }
+}

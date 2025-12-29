@@ -1,0 +1,39 @@
+import java.util.*;
+import java.util.concurrent.*;
+
+public class MatrixMulConcurrent {
+    static double[][] multiply(double[][] A, double[][] B, int threads) throws InterruptedException {
+        int n = A.length, m = B[0].length, k = B.length;
+        double[][] C = new double[n][m];
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        for (int i = 0; i < n; i++) {
+            final int row = i;
+            pool.submit(() -> {
+                for (int j = 0; j < m; j++) {
+                    double sum = 0;
+                    for (int t = 0; t < k; t++) sum += A[row][t] * B[t][j];
+                    C[row][j] = sum;
+                }
+            });
+        }
+        pool.shutdown();
+        pool.awaitTermination(1, TimeUnit.MINUTES);
+        return C;
+    }
+
+    static double[][] rand(int n, int m) {
+        Random r = new Random(42);
+        double[][] X = new double[n][m];
+        for(int i=0;i<n;i++) for(int j=0;j<m;j++) X[i][j] = r.nextDouble();
+        return X;
+    }
+
+    public static void main(String[] args) throws Exception {
+        int n=300,k=300,m=300;
+        double[][] A = rand(n,k), B = rand(k,m);
+        long t = System.currentTimeMillis();
+        double[][] C = multiply(A,B, Runtime.getRuntime().availableProcessors());
+        long dt = System.currentTimeMillis()-t;
+        System.out.println("Done: " + n + "x" + k + " * " + k + "x" + m + " in " + dt + " ms. Sample C[0][0]=" + C[0][0]);
+    }
+}

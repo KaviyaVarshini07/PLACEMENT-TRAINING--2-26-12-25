@@ -1,0 +1,26 @@
+import java.io.*;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+
+public class RestClient {
+    public static String get(String urlStr) throws IOException {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+        try (InputStream is = conn.getInputStream();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = is.read(buf)) != -1) baos.write(buf, 0, n);
+            return baos.toString(StandardCharsets.UTF_8);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        String url = args.length > 0 ? args[0] : "http://httpbin.org/get";
+        String resp = get(url);
+        System.out.println(resp.substring(0, Math.min(resp.length(), 500)));
+    }
+}

@@ -1,0 +1,109 @@
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+public class MiniChain {
+    public static void main(String[] args) throws Exception {
+        Blockchain chain = new Blockchain(4); // difficulty: leading zeros
+        chain.addBlock(List.of("Alice -> Bob: 5", "Bob -> Carol: 2"));
+        chain.addBlock(List.of("Carol -> Dave: 1", "Dave -> Alice: 3"));
+        System.out.println("Blockchain valid? " + chain.isValid());
+        chain.print();
+    }
+}
+
+class Blockchain {
+    private final List<Block> blocks = new ArrayList<>();
+    private final int difficulty;
+
+    public Blockchain(int difficulty) {
+        this.difficulty = difficulty;
+        blocks.add(Block.genesis(difficulty));
+    }
+
+    public void addBlock(List<String> transactions) throws Exception {
+        Block previous = blocks.get(blocks.size() - 1);
+        Block block = Block.mine(previous.hash, transactions, difficulty);
+        blocks.add(block);
+    }
+
+    public boolean isValid() throws Exception {
+        for (int i = 1; i < blocks.size(); i++) {
+            Block curr = blocks.get(i);
+            Block prev = blocks.get(i - 1);
+            if (!curr.hash.equals(curr.computeHash())) return false;
+            if (!curr.prevHash.equals(prev.hash)) return false;
+            if (!curr.hash.startsWith("0".repeat(difficulty))) return false;
+        }
+        return true;
+    }
+
+    public void print() {
+        for (int i = 0; i < blocks.size(); i++) {
+            Block b = blocks.get(i);
+            System.out.println("Block #" + i);
+            System.out.println("  prevHash: " + b.prevHash);
+            System.out.println("  nonce   : " + b.nonce);
+            System.out.println("  time    : " + b.timestamp);
+            System.out.println("  hash    : " + b.hash);
+            System.out.println("  txs     : " + b.transactions);
+        }
+    }
+}
+
+class Block {
+    final String prevHash;
+    final List<String> transactions;
+    final long timestamp;
+    final int difficulty;
+    long nonce;
+    String hash;
+
+    private Block(String prevHash, List<String> transactions, int difficulty) {
+        this.prevHash = prevHash;
+        this.transactions = new ArrayList<>(transactions);
+        this.timestamp = Instant.now().toEpochMilli();
+        this.difficulty = difficulty;
+        this.nonce = 0;
+        this.hash = "";
+    }
+
+    static Block genesis(int difficulty) {
+        Block g = new Block("0", List.of("GENESIS"), difficulty);
+        try { g.mineSelf(); } catch (Exception e) { throw new RuntimeException(e); }
+        return g;
+    }
+
+    static Block mine(String prevHash, List<String> transactions, int difficulty) throws Exception {
+        Block b = new Block(prevHash, transactions, difficulty);
+        b.mineSelf();
+        return b;
+    }
+
+    void mineSelf() throws Exception {
+        String target = "0".repeat(difficulty);
+        while (true) {
+            this.hash = computeHash();
+            if (hash.startsWith(target)) break;
+            nonce++;
+        }
+    }
+
+    String computeHash() throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        String data = prevHash + transactions.toString() + timestamp + nonce + difficulty;
+        byte[] bytes = digest.digest(data.getBytes(StandardCharsets.UTF_8));
+        return toHex(bytes);
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+            sb.append(Character.forDigit((b & 0xF), 16));
+        }
+        return sb.toString();
+    }
+}

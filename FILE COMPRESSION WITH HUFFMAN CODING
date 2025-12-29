@@ -1,0 +1,62 @@
+import java.io.*;
+import java.util.*;
+
+public class HuffmanCodec {
+    static class Node {
+        char ch; int freq; Node left,right;
+        Node(char ch,int freq){ this.ch=ch; this.freq=freq; }
+        Node(Node l, Node r){ this.left=l; this.right=r; this.freq=l.freq+r.freq; }
+        boolean isLeaf(){ return left==null && right==null; }
+    }
+
+    static Map<Character,Integer> freq(String s){
+        Map<Character,Integer> f = new HashMap<>();
+        for(char c: s.toCharArray()) f.put(c, f.getOrDefault(c,0)+1);
+        return f;
+    }
+
+    static Node buildTree(Map<Character,Integer> f){
+        PriorityQueue<Node> pq = new PriorityQueue<>(Comparator.comparingInt(n -> n.freq));
+        for(var e: f.entrySet()) pq.add(new Node(e.getKey(), e.getValue()));
+        while(pq.size()>1){
+            Node a=pq.poll(), b=pq.poll();
+            pq.add(new Node(a,b));
+        }
+        return pq.poll();
+    }
+
+    static void buildCode(Node n, String path, Map<Character,String> code){
+        if(n.isLeaf()){ code.put(n.ch, path.isEmpty() ? "0" : path); return; }
+        buildCode(n.left, path+"0", code);
+        buildCode(n.right, path+"1", code);
+    }
+
+    static String encode(String s, Map<Character,String> code){
+        StringBuilder sb = new StringBuilder();
+        for(char c: s.toCharArray()) sb.append(code.get(c));
+        return sb.toString();
+    }
+
+    static String decode(String bits, Node root){
+        StringBuilder out = new StringBuilder();
+        Node cur = root;
+        for(char b: bits.toCharArray()){
+            cur = (b=='0') ? cur.left : cur.right;
+            if(cur.isLeaf()){ out.append(cur.ch); cur = root; }
+        }
+        return out.toString();
+    }
+
+    public static void main(String[] args) {
+        String text = args.length > 0 ? String.join(" ", args) : "this is a huffman encoding example";
+        Map<Character,Integer> f = freq(text);
+        Node root = buildTree(f);
+        Map<Character,String> code = new HashMap<>();
+        buildCode(root, "", code);
+        String bits = encode(text, code);
+        String decoded = decode(bits, root);
+        System.out.println("Codes: " + code);
+        System.out.println("Encoded length (bits): " + bits.length());
+        System.out.println("Decoded equals original? " + decoded.equals(text));
+    }
+}

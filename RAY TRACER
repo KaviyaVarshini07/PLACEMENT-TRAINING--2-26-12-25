@@ -1,0 +1,64 @@
+import java.io.*;
+import java.util.*;
+
+public class RayTracer {
+    static class Vec3 {
+        double x,y,z;
+        Vec3(double x,double y,double z){this.x=x;this.y=y;this.z=z;}
+        Vec3 add(Vec3 o){ return new Vec3(x+o.x,y+o.y,z+o.z); }
+        Vec3 sub(Vec3 o){ return new Vec3(x-o.x,y-o.y,z-o.z); }
+        Vec3 mul(double t){ return new Vec3(x*t,y*t,z*t); }
+        double dot(Vec3 o){ return x*o.x+y*o.y+z*o.z; }
+        Vec3 norm(){ double l=Math.sqrt(dot(this)); return new Vec3(x/l,y/l,z/l); }
+    }
+    static class Sphere {
+        Vec3 c; double r; double brightness;
+        Sphere(Vec3 c,double r,double brightness){ this.c=c; this.r=r; this.brightness=brightness; }
+        double hit(Vec3 ro, Vec3 rd){
+            Vec3 oc = ro.sub(c);
+            double b = oc.dot(rd);
+            double c2 = oc.dot(oc) - r*r;
+            double disc = b*b - c2;
+            if(disc < 0) return -1;
+            double t = -b - Math.sqrt(disc);
+            return t > 0 ? t : -1;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        int W = 320, H = 200;
+        Vec3 cam = new Vec3(0,0,0);
+        Vec3 light = new Vec3(-1, 1, -0.5).norm();
+        Sphere[] scene = {
+            new Sphere(new Vec3(0,0,-3), 1.0, 0.9),
+            new Sphere(new Vec3(2,0,-4), 1.0, 0.7),
+            new Sphere(new Vec3(-2,0,-4), 1.0, 0.7)
+        };
+        try (PrintWriter pw = new PrintWriter(new FileWriter("out.ppm"))) {
+            pw.println("P3"); pw.println(W + " " + H); pw.println(255);
+            for(int y=0;y<H;y++){
+                for(int x=0;x<W;x++){
+                    double u = (2.0*x/W - 1.0);
+                    double v = (2.0*y/H - 1.0);
+                    Vec3 rd = new Vec3(u, -v, -1).norm();
+                    double bestT = Double.MAX_VALUE; Sphere hitObj = null;
+                    for(Sphere s: scene){
+                        double t = s.hit(cam, rd);
+                        if(t > 0 && t < bestT){ bestT = t; hitObj = s; }
+                    }
+                    int r=0,g=0,b=0;
+                    if(hitObj != null){
+                        Vec3 p = cam.add(rd.mul(bestT));
+                        Vec3 n = p.sub(hitObj.c).norm();
+                        double diff = Math.max(0, n.dot(light)) * hitObj.brightness;
+                        int c = (int)(diff * 255);
+                        r = c; g = c; b = c;
+                    }
+                    pw.print(r+" "+g+" "+b+" ");
+                }
+                pw.println();
+            }
+        }
+        System.out.println("Wrote out.ppm (open with an image viewer that supports PPM).");
+    }
+}
